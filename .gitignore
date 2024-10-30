@@ -6,7 +6,9 @@
 *.blend*
 *.lyx~
 build
+data/attribution.txt
 data/Bistro_textures
+data/Bistro_inside.vks
 data/Bistro_outside.vks
 data/quicksave.save
 data/brain.blob
