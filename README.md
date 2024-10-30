@@ -6,8 +6,8 @@ https://graphics.tudelft.nl/path_tracing_lectures
 
 # Build instructions
 
-Dependencies of this project are GLFW3 and Vulkan and those have to be installed separately.
-For Windows the Vulkan SDK can be downloaded here:
+Dependencies of this project are GLFW 3.4 or newer and Vulkan 1.3.295 or newer and those have to be installed separately.
+For Windows the Vulkan SDK installer can be downloaded here:
 https://vulkan.lunarg.com/sdk/home
 And GLFW is available here:
 https://www.glfw.org/download.html
@@ -16,7 +16,7 @@ Download the GLFW source package, unzip it into ext and rename it such that the 
 For Linux, it is probably easier to obtain Vulkan and GLFW via a package manager.
 For pacman, the relevant packages are: vulkan-headers vulkan-validation-layers glfw
 
-Once all dependencies are available, use CMake to build the project using your preferred IDE or the following commands (using the directory containing this README.md as working directory):
+Once all dependencies are available, use [CMake](https://cmake.org/) to build the project using your preferred IDE or the following commands (using the directory containing this README.md as working directory):
 $ cmake .
 $ make
 
@@ -31,4 +31,4 @@ Then launch the path_tracer binary.
 **Important:** The current working directory has to be the directory containing this README.md.
 If anything goes wrong, there should be an informative error message on stdout.
 
-Camera controls use WASD for horizontal movement, QE to move down/up and control/shift to adjust the speed. F1 toggles the UI, F2 toggles v-sync, F3/F4 are quicksave/quickload, F5 reloads shaders, holding F6 disables sample accumulation and F10/F11/F12 store screenshots to data in various formats.
+Camera controls use WASD for horizontal movement, QE to move down/up, right mouse button to rotate the camera and control/shift to adjust the speed. F1 toggles the UI, F2 toggles v-sync, F3/F4 are quicksave/quickload, F5 reloads shaders, holding F6 disables sample accumulation and F10/F11/F12 store screenshots to the data folder using hdr/png/jpg as format.
