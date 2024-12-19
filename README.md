@@ -1,7 +1,7 @@
 This repository contains a Vulkan rendering framework with an implementation of a path tracer written for educational purposes.
 The core code of the path tracer can be found in src/shaders/pathtrace.frag.glsl.
 The underlying rendering algorithms are described in lectures available here:
-https://graphics.tudelft.nl/path_tracing_lectures
+https://www.tudelft.nl/ewi/over-de-faculteit/afdelingen/intelligent-systems/computer-graphics-and-visualization/education/path-tracing-lecture
 
 
 # Build instructions
@@ -25,7 +25,7 @@ $ make
 
 If you want to see a scene other than the Cornell box, you must first make sure that you have all data files upon which the renderer depends.
 Several large files are not part of this repository and should instead be downloaded at the following link and added to the data directory.
-https://graphics.tudelft.nl/path_tracing_lectures
+https://www.tudelft.nl/ewi/over-de-faculteit/afdelingen/intelligent-systems/computer-graphics-and-visualization/education/path-tracing-lecture
 
 Then launch the path_tracer binary.
 **Important:** The current working directory has to be the directory containing this README.md.
