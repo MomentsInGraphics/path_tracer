@@ -283,16 +283,6 @@ typedef struct {
 } lit_scene_t;
 
 
-//! Volume data to be visualized
-typedef struct {
-	//! The file from which the volume was loaded. NULL once loading has
-	//! concluded.
-	FILE* file;
-	//! A single 3D image to be visualized
-	images_t volume;
-} volume_t;
-
-
 //! The render pass that performs all rasterization work for rendering one
 //! frame of the application and the framebuffers that it uses
 typedef struct {
@@ -529,13 +519,6 @@ void free_constant_buffers(constant_buffers_t* constant_buffers, const device_t*
 //! Updates constant_buffers->constants based on the state of the app and moves
 //! its contents to the staging buffer with the given index instantly
 int write_constant_buffer(constant_buffers_t* constant_buffers, const app_t* app, uint32_t buffer_index);
-
-
-//! \see volume_t
-int create_volume(volume_t* volume, const device_t* device);
-
-
-void free_volume(volume_t* volume, const device_t* device);
 
 
 //! Forwards to load_scene() using parameters that are appropriate for the

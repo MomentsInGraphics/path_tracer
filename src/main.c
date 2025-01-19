@@ -670,67 +670,6 @@ int write_constant_buffer(constant_buffers_t* constant_buffers, const app_t* app
 }
 
 
-void write_volume(void* image_data, uint32_t image_index, const VkImageSubresource* subresource, VkDeviceSize buffer_size, const VkImageCreateInfo* image_info, const VkExtent3D* subresource_extent, const void* context) {
-	const volume_t* volume = (const volume_t*) context;
-	size_t voxel_count = subresource_extent->width * subresource_extent->height * subresource_extent->depth;
-	fread(image_data, sizeof(float), voxel_count, volume->file);
-}
-
-
-int create_volume(volume_t* volume, const device_t* device) {
-	memset(volume, 0, sizeof(*volume));
-	// Open the volume file
-	const char* file_path = "data/brain.blob";
-	volume->file = fopen("data/brain.blob", "rb");
-	if (!volume->file) {
-		printf("Failed to open the volume file at %s. Please check the path and permissions.\n", file_path);
-		free_volume(volume, device);
-		return 1;
-	}
-	// Read the volume extent
-	VkExtent3D extent;
-	fread(&extent, sizeof(uint32_t), 3, volume->file);
-	// Create the volume
-	image_request_t request = {
-		.image_info = {
-			.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-			.arrayLayers = 1,
-			.extent = extent,
-			.format = VK_FORMAT_R32_SFLOAT,
-			.imageType = VK_IMAGE_TYPE_3D,
-			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			.mipLevels = 1,
-			.samples = VK_SAMPLE_COUNT_1_BIT,
-			.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-		},
-		.view_info = {
-			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-			.viewType = VK_IMAGE_VIEW_TYPE_3D,
-			.subresourceRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT },
-		},
-	};
-	if (create_images(&volume->volume, device, &request, 1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
-		printf("Failed to create a volume of size %ux%ux%u based on file %s.\n", extent.width, extent.height, extent.depth, file_path);
-		free_volume(volume, device);
-		return 1;
-	}
-	// Fill the volume
-	if (fill_images(&volume->volume, device, &write_volume, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, volume)) {
-		printf("Failed to upload a volume of size %ux%ux%u from file %s to the GPU.\n", extent.width, extent.height, extent.depth, file_path);
-		free_volume(volume, device);
-		return 1;
-	}
-	return 0;
-}
-
-
-void free_volume(volume_t* volume, const device_t* device) {
-	free_images(&volume->volume, device);
-	if (volume->file) fclose(volume->file);
-	memset(volume, 0, sizeof(*volume));
-}
-
-
 int create_lit_scene(lit_scene_t* lit_scene, const device_t* device, const scene_spec_t* scene_spec) {
 	const char* scene_path;
 	const char* textures_path;
