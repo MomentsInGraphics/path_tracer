@@ -29,6 +29,21 @@
 	output by this program.
 	\see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkFormat.html */
 typedef enum vk_format_e {
+	VK_FORMAT_R8_UNORM = 9,
+	VK_FORMAT_R8_SNORM = 10,
+	VK_FORMAT_R8_UINT = 13,
+	VK_FORMAT_R8_SINT = 14,
+	VK_FORMAT_R8_SRGB = 15,
+	VK_FORMAT_R8G8_UNORM = 16,
+	VK_FORMAT_R8G8_SNORM = 17,
+	VK_FORMAT_R8G8_UINT = 20,
+	VK_FORMAT_R8G8_SINT = 21,
+	VK_FORMAT_R8G8_SRGB = 22,
+	VK_FORMAT_R8G8B8A8_UNORM = 37,
+	VK_FORMAT_R8G8B8A8_SNORM = 38,
+	VK_FORMAT_R8G8B8A8_UINT = 41,
+	VK_FORMAT_R8G8B8A8_SINT = 42,
+	VK_FORMAT_R8G8B8A8_SRGB = 43,
 	VK_FORMAT_R16G16B16_SFLOAT = 90,
 	VK_FORMAT_R16G16B16A16_SFLOAT = 97,
 	VK_FORMAT_R32G32B32_SFLOAT = 106,
@@ -108,42 +123,43 @@ int main(int argc, char** argv) {
 	if (argc >= 4)
 		sscanf(argv[1], "%d", &format_int);
 	vk_format_t format = (vk_format_t) format_int;
-	vk_format_t known_formats[] = {
-		VK_FORMAT_R16G16B16_SFLOAT,
-		VK_FORMAT_R16G16B16A16_SFLOAT,
-		VK_FORMAT_R32G32B32_SFLOAT,
-		VK_FORMAT_R32G32B32A32_SFLOAT,
-		VK_FORMAT_BC1_RGB_UNORM_BLOCK,
-		VK_FORMAT_BC1_RGB_SRGB_BLOCK,
-		VK_FORMAT_BC5_UNORM_BLOCK,
-	};
-	int32_t format_known = 0;
-	for (int32_t i = 0; i != sizeof(known_formats) / sizeof(known_formats[0]); ++i)
-		format_known |= (known_formats[i] == format);
-	if (argc < 4 || !format_known) {
-		printf("Usage: texture_compression <vk_format> <input_file_path> <output_file_path>\n");
-		printf("vk_format can be one of the following integer values from the VkFormat enumeration in Vulkan:\n\
-VK_FORMAT_R16G16B16_SFLOAT = 90\n\
-VK_FORMAT_R16G16B16A16_SFLOAT = 97\n\
-VK_FORMAT_R32G32B32_SFLOAT = 106\n\
-VK_FORMAT_R32G32B32A32_SFLOAT = 109\n\
-VK_FORMAT_BC1_RGB_UNORM_BLOCK = 131\n\
-VK_FORMAT_BC1_RGB_SRGB_BLOCK = 132\n\
-VK_FORMAT_BC5_UNORM_BLOCK = 141\n");
-		printf("For a list of supported input file formats, see:\n");
-		printf("https://github.com/nothings/stb/blob/master/stb_image.h\n");
-		printf("The output format is *.vkt, which is a renderer specific format with mipmaps (similar to *.dds).\n");
-		return 1;
-	}
-	const char* input_file_path = argv[argc - 2];
-	const char* output_file_path = argv[argc - 1];
 
 	// Prepare some information about the output format
-	int32_t is_hdr = 0, is_half = 0, is_srgb = 0, is_bc1 = 0;
+	int32_t is_hdr = 0, is_half = 0, is_srgb = 0, is_bc1 = 0, is_8_bit = 0, format_known = 1;
 	size_t block_size = 0;
 	size_t bits_per_pixel;
 	int32_t channel_count = 3;
 	switch (format) {
+	case VK_FORMAT_R8_SRGB:
+		is_srgb = 1;
+	case VK_FORMAT_R8_UNORM:
+	case VK_FORMAT_R8_SNORM:
+	case VK_FORMAT_R8_UINT:
+	case VK_FORMAT_R8_SINT:
+		channel_count = 1;
+		bits_per_pixel = 8;
+		is_8_bit = 1;
+		break;
+	case VK_FORMAT_R8G8_SRGB:
+		is_srgb = 1;
+	case VK_FORMAT_R8G8_UNORM:
+	case VK_FORMAT_R8G8_SNORM:
+	case VK_FORMAT_R8G8_UINT:
+	case VK_FORMAT_R8G8_SINT:
+		channel_count = 2;
+		bits_per_pixel = 16;
+		is_8_bit = 1;
+		break;
+	case VK_FORMAT_R8G8B8A8_SRGB:
+		is_srgb = 1;
+	case VK_FORMAT_R8G8B8A8_UNORM:
+	case VK_FORMAT_R8G8B8A8_SNORM:
+	case VK_FORMAT_R8G8B8A8_UINT:
+	case VK_FORMAT_R8G8B8A8_SINT:
+		channel_count = 4;
+		bits_per_pixel = 32;
+		is_8_bit = 1;
+		break;
 	case VK_FORMAT_R16G16B16A16_SFLOAT:
 		channel_count = 4;
 		bits_per_pixel = 64;
@@ -179,11 +195,45 @@ VK_FORMAT_BC5_UNORM_BLOCK = 141\n");
 		is_bc1 = 1;
 		break;
 	default:
+		format_known = 0;
 		break;
 	}
+	if (argc < 4 || !format_known) {
+		printf("Usage: texture_compression <vk_format> <input_file_path> <output_file_path>\n");
+		printf("vk_format can be one of the following integer values from the VkFormat enumeration in Vulkan:\n\
+VK_FORMAT_R8_UNORM = 9\n\
+VK_FORMAT_R8_SNORM = 10\n\
+VK_FORMAT_R8_UINT = 13\n\
+VK_FORMAT_R8_SINT = 14\n\
+VK_FORMAT_R8_SRGB = 15\n\
+VK_FORMAT_R8G8_UNORM = 16\n\
+VK_FORMAT_R8G8_SNORM = 17\n\
+VK_FORMAT_R8G8_UINT = 20\n\
+VK_FORMAT_R8G8_SINT = 21\n\
+VK_FORMAT_R8G8_SRGB = 22\n\
+VK_FORMAT_R8G8B8A8_UNORM = 37\n\
+VK_FORMAT_R8G8B8A8_SNORM = 38\n\
+VK_FORMAT_R8G8B8A8_UINT = 41\n\
+VK_FORMAT_R8G8B8A8_SINT = 42\n\
+VK_FORMAT_R8G8B8A8_SRGB = 43\n\
+VK_FORMAT_R16G16B16_SFLOAT = 90\n\
+VK_FORMAT_R16G16B16A16_SFLOAT = 97\n\
+VK_FORMAT_R32G32B32_SFLOAT = 106\n\
+VK_FORMAT_R32G32B32A32_SFLOAT = 109\n\
+VK_FORMAT_BC1_RGB_UNORM_BLOCK = 131\n\
+VK_FORMAT_BC1_RGB_SRGB_BLOCK = 132\n\
+VK_FORMAT_BC5_UNORM_BLOCK = 141\n");
+		printf("For a list of supported input file formats, see:\n");
+		printf("https://github.com/nothings/stb/blob/master/stb_image.h\n");
+		printf("The output format is *.vkt, which is a renderer specific format with mipmaps (similar to *.dds).\n");
+		return 1;
+	}
+	const char* input_file_path = argv[argc - 2];
+	const char* output_file_path = argv[argc - 1];
 
 	// Prepare the image
 	int32_t width, height, input_channel_count, pixel_count;
+	int32_t shared_channel_count = channel_count;
 	float* linear_image;
 	if (is_hdr) {
 		// Open the image
@@ -202,24 +252,26 @@ VK_FORMAT_BC5_UNORM_BLOCK = 141\n");
 			printf("Failed to load the image at path %s.\n", input_file_path);
 			return 1;
 		}
+		if (shared_channel_count > input_channel_count)
+			shared_channel_count = input_channel_count;
 		// Convert to linear RGB and discard superfluous channels
 		pixel_count = width * height;
-		linear_image = malloc(pixel_count * channel_count * sizeof(float));
+		linear_image = malloc(pixel_count * shared_channel_count * sizeof(float));
 		if (is_srgb)
 			for (int32_t i = 0; i != pixel_count; ++i)
-				for (int32_t j = 0; j != channel_count; ++j)
-					linear_image[i * channel_count + j] = srgb_to_linear(loaded_image[i * input_channel_count + j]);
+				for (int32_t j = 0; j != shared_channel_count; ++j)
+					linear_image[i * shared_channel_count + j] = srgb_to_linear(loaded_image[i * input_channel_count + j]);
 		else
 			for (int32_t i = 0; i != pixel_count; ++i)
-				for (int32_t j = 0; j != channel_count; ++j)
-					linear_image[i * channel_count + j] = loaded_image[i * input_channel_count + j] * (1.0f / 255.0f);
+				for (int32_t j = 0; j != shared_channel_count; ++j)
+					linear_image[i * shared_channel_count + j] = loaded_image[i * input_channel_count + j] * (1.0f / 255.0f);
 		// We no longer need the LDR image
 		stbi_image_free(loaded_image);
 		loaded_image = NULL;
 	}
 
 	// Check the channel count
-	if (input_channel_count < channel_count) {
+	if (input_channel_count < channel_count && !is_8_bit) {
 		printf("The image at path %s has %d channels but needs to have at least %d.\n", input_file_path, input_channel_count, channel_count);
 		free(linear_image);
 		return 1;
@@ -245,13 +297,13 @@ VK_FORMAT_BC5_UNORM_BLOCK = 141\n");
 			width = height = 4;
 			pixel_count = 16;
 			float color[4];
-			for (int32_t j = 0; j != channel_count; ++j)
+			for (int32_t j = 0; j != shared_channel_count; ++j)
 				color[j] = linear_image[j];
 			free(linear_image);
-			linear_image = malloc(pixel_count * channel_count * sizeof(float));
+			linear_image = malloc(pixel_count * shared_channel_count * sizeof(float));
 			for (int32_t i = 0; i != pixel_count; ++i)
-				for (int32_t j = 0; j != channel_count; ++j)
-				linear_image[i * channel_count + j] = color[j];
+				for (int32_t j = 0; j != shared_channel_count; ++j)
+					linear_image[i * shared_channel_count + j] = color[j];
 		}
 		if (width < 4 || height < 4) {
 			printf("The image at path %s has extent %dx%d but it must be at least 4x4 for block compression to work.\n", input_file_path, width, height);
@@ -292,7 +344,7 @@ VK_FORMAT_BC5_UNORM_BLOCK = 141\n");
 
 	// Allocate scratch memory for the largest mipmap (it will be used for all
 	// of them)
-	float* linear_mipmap = malloc(((sizeof(float) * width * height) / 4) * channel_count);
+	float* linear_mipmap = malloc(((sizeof(float) * width * height) / 4) * shared_channel_count);
 	// Generate mipmaps
 	for (int32_t i = 0; i != mipmap_count; ++i) {
 		int32_t mipmap_width = width >> i;
@@ -306,15 +358,18 @@ VK_FORMAT_BC5_UNORM_BLOCK = 141\n");
 			// Prepare the normalized Gaussian filter
 			int32_t filter_scale = (1 << i);
 			int32_t stride = filter_scale;
-			float standard_deviation = 0.4f * filter_scale;
-			float gaussian_factor = -0.5f / (standard_deviation * standard_deviation);
-			int32_t filter_extent = (int32_t) ceilf(3.0f * standard_deviation);
-			float filter_center = filter_extent - 0.5f;
-			float* filter_weights = malloc(2 * filter_extent * sizeof(float));
-			float total_weight = 0.0f;
+			double standard_deviation = 0.4 * filter_scale;
+			double gaussian_factor = -0.5 / (standard_deviation * standard_deviation);
+			int32_t filter_extent = (int32_t) ceil(3.0 * standard_deviation);
+			double filter_center = filter_extent - 0.5;
+			double* filter_weights = malloc(2 * filter_extent * sizeof(double));
 			for (int32_t j = 0; j != 2 * filter_extent; ++j)
-				total_weight += filter_weights[j] = expf(gaussian_factor * (j - filter_center) * (j - filter_center));
-			float normalization = 1.0f / total_weight;
+				filter_weights[j] = exp(gaussian_factor * (j - filter_center) * (j - filter_center));
+			double total_weight = 0.0;
+			for (int32_t j = 0; j != 2 * filter_extent; ++j)
+				for (int32_t k = 0; k != 2 * filter_extent; ++k)
+					total_weight += filter_weights[j] * filter_weights[k];
+			double normalization = 1.0 / sqrt(total_weight);
 			for (int32_t j = 0; j != 2 * filter_extent; ++j)
 				filter_weights[j] *= normalization;
 			int32_t offset = stride / 2 - filter_extent;
@@ -323,9 +378,7 @@ VK_FORMAT_BC5_UNORM_BLOCK = 141\n");
 			int32_t mask_y = height - 1;
 			for (int32_t y = 0; y != mipmap_height; ++y) {
 				for (int32_t x = 0; x != mipmap_width; ++x) {
-					float* pixel = mipmap + channel_count * (y * mipmap_width + x);
-					for (int32_t l = 0; l != channel_count; ++l)
-						pixel[l] = 0.0f;
+					double pixel[4] = { 0.0, 0.0, 0.0, 0.0 };
 					// Iterate over the filter footprint
 					for (int32_t k = 0; k != 2 * filter_extent; ++k) {
 						for (int32_t j = 0; j != 2 * filter_extent; ++j) {
@@ -333,12 +386,16 @@ VK_FORMAT_BC5_UNORM_BLOCK = 141\n");
 							source_x &= mask_x;
 							int32_t source_y = y * stride + offset + k;
 							source_y &= mask_y;
-							int32_t pixel_start = channel_count * (source_y * width + source_x);
-							float weight = filter_weights[j] * filter_weights[k];
-							for (int32_t l = 0; l != channel_count; ++l)
+							int32_t pixel_start = shared_channel_count * (source_y * width + source_x);
+							double weight = filter_weights[j] * filter_weights[k];
+							for (int32_t l = 0; l != shared_channel_count; ++l)
 								pixel[l] += weight * linear_image[pixel_start + l];
 						}
 					}
+					// Cast the pixel to float
+					float* mipmap_pixel = mipmap + shared_channel_count * (y * mipmap_width + x);
+					for (int32_t l = 0; l != shared_channel_count; ++l)
+						mipmap_pixel[l] = (float) pixel[l];
 				}
 			}
 			free(filter_weights);
@@ -384,14 +441,26 @@ VK_FORMAT_BC5_UNORM_BLOCK = 141\n");
 			uint16_t pixel[4] = {0};
 			for (int32_t y = 0; y != mipmap_height; ++y) {
 				for (int32_t x = 0; x != mipmap_width; ++x) {
-					for (int32_t l = 0; l != channel_count; ++l)
-						pixel[l] = float_to_half(mipmap[(y * mipmap_width + x) * channel_count + l]);
+					for (int32_t l = 0; l != shared_channel_count; ++l)
+						pixel[l] = float_to_half(mipmap[(y * mipmap_width + x) * shared_channel_count + l]);
 					fwrite((void*) pixel, sizeof(uint16_t), channel_count, file);
 				}
 			}
 		}
 		else if (is_hdr)
 			fwrite(mipmap, sizeof(float), mipmap_width * mipmap_height * channel_count, file);
+		// Write low-dynamic range formats with 8 bits per pixel
+		else if (is_8_bit) {
+			for (int32_t y = 0; y != mipmap_height; ++y) {
+				for (int32_t x = 0; x != mipmap_width; ++x) {
+					uint8_t pixel[4] = { 0, 0, 0, 255 };
+					for (int32_t l = 0; l != shared_channel_count; ++l)
+						pixel[l] = is_srgb ? linear_to_srgb(mipmap[shared_channel_count * (y * mipmap_width + x) + l])
+										  : quantize_linear(mipmap[shared_channel_count * (y * mipmap_width + x) + l]);
+					fwrite(pixel, bits_per_pixel / 8, 1, file);
+				}
+			}
+		}
 	}
 
 	// Write an end of file marker
