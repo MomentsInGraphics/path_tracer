@@ -100,20 +100,23 @@ def convert_materials(destination_directory, source_directory, skip_existing=Tru
     :param source_directory: The directory that is searched for textures. Only
         file names ending with _BaseColor, _Normal or _Specular are considered.
     :param skip_existing: Pass True to skip files that would require the output
-        file to be overwritten. Otherwise output files are overwritten without
+        file to be overwritten. Otherwise, output files are overwritten without
         prompt.
     :param texture_conversion_path: Path to a binary of the program in the
         texture_conversion folder.
     """
     if not os.path.exists(destination_directory):
         os.makedirs(destination_directory)
+    # Lists (terminated, source_file, args, process). First source_file and
+    # args are set, once work starts process is set, once it is finished,
+    # terminated is set to True
     tasks = list()
     for file in os.listdir(source_directory):
         match = re.search(r"(_BaseColor\.)|(_Normal\.)|(_Specular\.)", file)
         if match is not None and os.path.splitext(file)[1] != ".vkt":
+            source_file = os.path.join(source_directory, file)
             is_srgb = match.group(1) is not None
             is_normal_map = match.group(2) is not None
-            source_file = os.path.join(source_directory, file)
             destination_file = os.path.join(destination_directory, os.path.splitext(file)[0] + ".vkt")
             if not skip_existing or not os.path.exists(destination_file):
                 if is_srgb:
@@ -122,22 +125,26 @@ def convert_materials(destination_directory, source_directory, skip_existing=Tru
                     format = 141
                 else:
                     format = 131
-                process = Popen([texture_conversion_path, str(format), source_file, destination_file])
-                tasks.append([False, source_file, process])
-    # Wait for all processes to finish
-    all_done = False
-    while not all_done:
-        all_done = True
+                args = [texture_conversion_path, str(format), source_file, destination_file]
+                tasks.append([False, source_file, args, None])
+    # Launch all processes without launching too many at once to avoid running
+    # out of memory
+    cpu_count = os.cpu_count()
+    print("Using %d threads to convert materials." % cpu_count)
+    if cpu_count is None:
+        cpu_count = 32
+    launched_count = terminated_count = 0
+    while terminated_count < len(tasks):
         for task in tasks:
-            terminated, source_file, process = task
-            if not terminated:
-                return_code = process.poll()
-                if return_code is not None:
-                    task[0] = True
-                    if return_code == 0:
-                        print("Finished %s" % source_file)
-                    else:
-                        print("Failed for %s with return code %d." % (source_file, return_code))
+            terminated, source_file, args, process = task
+            if not terminated and process is not None and (return_code := process.poll()) is not None:
+                task[0] = True
+                terminated_count += 1
+                if return_code == 0:
+                    print("Finished %s" % source_file)
                 else:
-                    all_done = False
-        sleep(0.2)
+                    print("Failed for %s with return code %d." % (source_file, return_code))
+            if process is None and launched_count - terminated_count < cpu_count:
+                task[3] = Popen(args)
+                launched_count += 1
+        sleep(0.1)
