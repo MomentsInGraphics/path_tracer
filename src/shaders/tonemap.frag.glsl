@@ -3,7 +3,7 @@
 #include "constants.glsl"
 
 //! The render target containing HDR radiance values
-layout (binding = 1, input_attachment_index = 0) uniform subpassInput g_visibility_buffer;
+layout (binding = 1, input_attachment_index = 0) uniform subpassInput g_hdr_radiance;
 
 
 //! The sRGB color and alpha to draw to the screen
@@ -63,10 +63,12 @@ vec3 tonemapper_aces(vec3 color) {
 
 
 void main() {
-	vec4 hdr_radiance = subpassLoad(g_visibility_buffer);
+	vec4 hdr_radiance = subpassLoad(g_hdr_radiance);
 	float factor = g_exposure / float(g_accum_frame_count);
 	g_out_color = hdr_radiance * vec4(vec3(factor), hdr_radiance.a);
-#if TONEMAPPER_ACES
+#if TONEMAPPER_CLAMP
+	g_out_color.rgb = clamp(g_out_color.rgb, 0.0, 1.0);
+#elif TONEMAPPER_ACES
 	g_out_color.rgb = tonemapper_aces(g_out_color.rgb);
 #elif TONEMAPPER_KHRONOS_PBR_NEUTRAL
 	g_out_color.rgb = tonemapper_khronos_pbr_neutral(g_out_color.rgb);
