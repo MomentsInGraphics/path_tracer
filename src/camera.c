@@ -140,10 +140,11 @@ void get_view_to_projection_space(float view_to_projection[4 * 4], const camera_
 		{
 			float height = camera->height;
 			float width = aspect_ratio * height;
+			// Based on: https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/glOrtho.xml
 			float new_view_to_projection[4 * 4] = {
 				2.0f / width, 0.0f, 0.0f, 0.0f,
 				0.0f, 2.0f / height, 0.0f, 0.0f,
-				0.0f, 0.0f, 1.0f / (far - near), near / (near - far),
+				0.0f, 0.0f, -2.0f / (far - near), -(far + near) / (far - near),
 				0.0f, 0.0f, 0.0f, 1.0f,
 			};
 			memcpy(view_to_projection, new_view_to_projection, sizeof(new_view_to_projection));
