@@ -316,8 +316,6 @@ typedef struct {
 //! The objects needed to copy the HDR render target to the screen with tone
 //! mapping
 typedef struct {
-	//! A vertex buffer for a screen filling triangle (two floats per vertex)
-	buffers_t triangle_buffer;
 	//! The descriptor set used for tone mapping
 	descriptor_sets_t descriptor_set;
 	//! The graphics pipeline used for tone mapping

@@ -967,16 +967,8 @@ int create_scene_subpass(scene_subpass_t* subpass, const device_t* device, const
 	for (uint32_t i = 0; i != COUNT_OF(defines); ++i)
 		free(defines[i]);
 	// Define the graphics pipeline state
-	VkVertexInputBindingDescription vertex_binding = { .stride = sizeof(float) * 2 };
-	VkVertexInputAttributeDescription vertex_attributes[] = {
-		{ .location = 0, .offset = 0, .format = VK_FORMAT_R32G32_SFLOAT },
-	};
 	VkPipelineVertexInputStateCreateInfo vertex_input_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		.pVertexBindingDescriptions = &vertex_binding,
-		.vertexBindingDescriptionCount = 1,
-		.pVertexAttributeDescriptions = vertex_attributes,
-		.vertexAttributeDescriptionCount = COUNT_OF(vertex_attributes),
 	};
 	VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -1086,33 +1078,8 @@ void free_scene_subpass(scene_subpass_t* subpass, const device_t* device) {
 }
 
 
-//! Callback for fill_buffer() to write a screen-filling triangle
-void write_screen_filling_triangle(void* buffer_data, uint32_t buffer_index, VkDeviceSize buffer_size, const void* context) {
-	float vertex_buffer[] = { -1.5f, -1.5f,  -1.5f, 5.0f,  5.0f, -1.5f };
-	memcpy(buffer_data, vertex_buffer, sizeof(vertex_buffer));
-}
-
-
 int create_tonemap_subpass(tonemap_subpass_t* subpass, const device_t* device, const render_targets_t* render_targets, const constant_buffers_t* constant_buffers, const render_pass_t* render_pass, const scene_spec_t* scene_spec) {
 	memset(subpass, 0, sizeof(*subpass));
-	// Create a buffer containing a single triangle
-	buffer_request_t triangle_request = {
-		.buffer_info = {
-			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-			.size = sizeof(float) * 2 * 3,
-			.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		},
-	};
-	if (create_buffers(&subpass->triangle_buffer, device, &triangle_request, 1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 1)) {
-		printf("Failed to create a vertex buffer for a screen-filling triangle.\n");
-		free_tonemap_subpass(subpass, device);
-		return 1;
-	}
-	if (fill_buffers(&subpass->triangle_buffer, device, &write_screen_filling_triangle, NULL)) {
-		printf("Failed to write a vertex buffer for a screen-filling triangle to the GPU.\n");
-		free_tonemap_subpass(subpass, device);
-		return 1;
-	}
 	// Create a descriptor set
 	VkDescriptorSetLayoutBinding bindings[] = {
 		// The constant buffer
@@ -1173,16 +1140,8 @@ int create_tonemap_subpass(tonemap_subpass_t* subpass, const device_t* device, c
 	for (uint32_t i = 0; i != COUNT_OF(defines); ++i)
 		free(defines[i]);
 	// Define the graphics pipeline state
-	VkVertexInputBindingDescription vertex_binding = { .stride = sizeof(float) * 2 };
-	VkVertexInputAttributeDescription vertex_attributes[] = {
-		{ .location = 0, .offset = 0, .format = VK_FORMAT_R32G32_SFLOAT },
-	};
 	VkPipelineVertexInputStateCreateInfo vertex_input_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		.pVertexBindingDescriptions = &vertex_binding,
-		.vertexBindingDescriptionCount = 1,
-		.pVertexAttributeDescriptions = vertex_attributes,
-		.vertexAttributeDescriptionCount = COUNT_OF(vertex_attributes),
 	};
 	VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -1267,7 +1226,6 @@ void free_tonemap_subpass(tonemap_subpass_t* subpass, const device_t* device) {
 	free_descriptor_sets(&subpass->descriptor_set, device);
 	if (subpass->vert_shader) vkDestroyShaderModule(device->device, subpass->vert_shader, NULL);
 	if (subpass->frag_shader) vkDestroyShaderModule(device->device, subpass->frag_shader, NULL);
-	free_buffers(&subpass->triangle_buffer, device);
 	memset(subpass, 0, sizeof(*subpass));
 }
 
@@ -1918,7 +1876,6 @@ VkResult record_render_frame_commands(app_t* app, frame_workload_t* frame, uint3
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, app->scene_subpass.pipeline_accum);
 	++app->render_targets.accum_frame_count;
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, app->scene_subpass.descriptor_set.pipeline_layout, 0, 1, app->scene_subpass.descriptor_set.descriptor_sets, 0, NULL);
-	vkCmdBindVertexBuffers(cmd, 0, 1, &app->tonemap_subpass.triangle_buffer.buffers[0].buffer, &(VkDeviceSize) { 0 });
 	vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, frame->query_pool, timestamp_index_shading_begin);
 	vkCmdDraw(cmd, 3, 1, 0, 0);
 	vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, frame->query_pool, timestamp_index_shading_end);
@@ -1926,7 +1883,6 @@ VkResult record_render_frame_commands(app_t* app, frame_workload_t* frame, uint3
 	vkCmdNextSubpass(cmd, VK_SUBPASS_CONTENTS_INLINE);
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, app->tonemap_subpass.pipeline);
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, app->tonemap_subpass.descriptor_set.pipeline_layout, 0, 1, app->tonemap_subpass.descriptor_set.descriptor_sets, 0, NULL);
-	vkCmdBindVertexBuffers(cmd, 0, 1, &app->tonemap_subpass.triangle_buffer.buffers[0].buffer, &(VkDeviceSize) { 0 });
 	vkCmdDraw(cmd, 3, 1, 0, 0);
 	// Render the GUI
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, app->gui_subpass.pipeline);

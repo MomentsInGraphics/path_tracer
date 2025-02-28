@@ -1,10 +1,11 @@
 #version 460
 
-//! The x- and y-coordinates of the projection space position of the screen-
-//! filling triangle
-layout (location = 0) in vec2 g_vertex_pos;
-
 
 void main() {
-	gl_Position = vec4(g_vertex_pos, 0.0, 1.0);
+	int id = gl_VertexIndex;
+	vec2 pos = vec2(0.0);
+	if (id == 0) pos = vec2(-1.1, -1.1);
+	if (id == 1) pos = vec2(-1.1, 3.5);
+	if (id == 2) pos = vec2(3.5, -1.1);
+	gl_Position = vec4(pos, 0.0, 1.0);
 }
