@@ -1605,6 +1605,11 @@ bool key_pressed(GLFWwindow* window, int key_code) {
 
 
 int handle_user_input(app_t* app, app_update_t* update) {
+	// Check if the framebuffer size has changed
+	int new_width, new_height;
+	glfwGetFramebufferSize(app->window, &new_width, &new_height);
+	if (app->swapchain.extent.width != (uint32_t) new_width || app->swapchain.extent.height != (uint32_t) new_height)
+		update->swapchain = true;
 	// Keep track of whether the scene specification changes to reset
 	// accumulation
 	scene_spec_t old_spec = app->scene_spec;
