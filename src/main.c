@@ -384,9 +384,15 @@ void handle_gui_input(gui_t* gui, GLFWwindow* window) {
 			down |= glfwGetKey(window, GLFW_KEY_KP_ENTER) == GLFW_PRESS;
 		nk_input_key(ctx, i, down);
 	}
-	// Feed mouse input
+	// Get the cursor position in pixels
 	double x, y;
 	glfwGetCursorPos(window, &x, &y);
+	int wf, hf, ww, hw;
+	glfwGetFramebufferSize(window, &wf, &hf);
+	glfwGetWindowSize(window, &ww, &hw);
+	x *= wf / (double) ww;
+	y *= hf / (double) hw;
+	// Feed mouse input
 	nk_input_motion(ctx, (int) x, (int) y);
 	nk_input_button(ctx, NK_BUTTON_LEFT, (int) x, (int) y, glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS);
 	nk_input_button(ctx, NK_BUTTON_RIGHT, (int) x, (int) y, glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS);
