@@ -71,10 +71,14 @@ float get_spherical_light_importance(vec3 center, float radius, vec3 shading_pos
 	vec3 center_dir = center - shading_pos;
 	if (dot(normal, center_dir) < -radius)
 		return 0.0;
-	// Compute the solid angle
+	// Compute the solid angle. We want z_range = 1.0 - z_min, where
+	// z_min = sqrt(1.0 - sin_2). Computing it like that results in
+	// cancelation for small sin_2, so instead we put the square root into
+	// the denominator to solve the same quadratic equation:
+	// https://en.wikipedia.org/wiki/Quadratic_formula#Square_root_in_the_denominator
 	float center_dist_2 = dot(center_dir, center_dir);
-	float z_min = sqrt(max(0.0, 1.0 - radius * radius / center_dist_2));
-	float z_range = 1.0 - z_min;
+	float sin_2 = radius * radius / center_dist_2;
+	float z_range = sin_2 / (1.0 + sqrt(max(0.0, 1.0 - sin_2)));
 	return z_range;
 }
 
