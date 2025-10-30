@@ -1,6 +1,10 @@
 BSD 3-Clause License
 
-Copyright (c) 2024, Christoph Peters, TU Delft
+The following license applies to all source code files in this repository that do not have a license header stating a different license.
+Files in data/ are subject to different licenses as indicated by data/attribution.txt.
+
+
+Copyright (c) 2025, Christoph Peters, TU Delft
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:

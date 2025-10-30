@@ -55,11 +55,14 @@ int create_device(device_t* device, const char* app_name, uint32_t physical_devi
 	vkEnumeratePhysicalDevices(device->instance, &device->physical_device_count, device->physical_devices);
 	printf("The following GPUs are available to Vulkan:\n");
 	for (uint32_t i = 0; i != device->physical_device_count; ++i) {
-		VkPhysicalDeviceProperties props;
-		vkGetPhysicalDeviceProperties(device->physical_devices[i], &props);
-		printf("%u%s %s\n", i, (i == physical_device_index) ? " (used):" : ":       ", props.deviceName);
-		if (i == physical_device_index)
-			device->physical_device_properties = props;
+		VkPhysicalDeviceVulkan11Properties props_11 = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES };
+		VkPhysicalDeviceProperties2 props = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &props_11 };
+		vkGetPhysicalDeviceProperties2(device->physical_devices[i], &props);
+		printf("%u%s %s\n", i, (i == physical_device_index) ? " (used):" : ":       ", props.properties.deviceName);
+		if (i == physical_device_index) {
+			device->physical_device_properties = props.properties;
+			device->physical_device_properties_11 = props_11;
+		}
 	}
 	if (physical_device_index >= device->physical_device_count) {
 		printf("The requested physical device index %u is not available. Either you lower the index or you install more GPUs.\n", physical_device_index);
@@ -98,10 +101,6 @@ int create_device(device_t* device, const char* app_name, uint32_t physical_devi
 		VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
 		VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-		VK_KHR_RAY_QUERY_EXTENSION_NAME,
 	};
 	// Create a device
 	VkDeviceQueueCreateInfo queue_info = {
@@ -116,18 +115,9 @@ int create_device(device_t* device, const char* app_name, uint32_t physical_devi
 	};
 	VkPhysicalDeviceVulkan12Features enabled_new_features = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-		.pNext = &(VkPhysicalDeviceAccelerationStructureFeaturesKHR) {
-			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-			.pNext = &(VkPhysicalDeviceRayQueryFeaturesKHR) {
-				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
-				.rayQuery = VK_TRUE,
-			},
-			.accelerationStructure = VK_TRUE,
-		},
 		.descriptorIndexing = VK_TRUE,
 		.shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
 		.shaderUniformTexelBufferArrayDynamicIndexing = VK_TRUE,
-		.bufferDeviceAddress = VK_TRUE,
 	};
 	VkDeviceCreateInfo device_info = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -147,13 +137,6 @@ int create_device(device_t* device, const char* app_name, uint32_t physical_devi
 	}
 	// Query the queue from the device
 	vkGetDeviceQueue(device->device, device->queue_family_index, 0, &device->queue);
-	// Query acceleration structure properties
-	device->bvh_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
-	VkPhysicalDeviceProperties2KHR device_properties = {
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR,
-		.pNext = &device->bvh_properties,
-	};
-	vkGetPhysicalDeviceProperties2(device->physical_device, &device_properties);
 	// Create a command pool
 	VkCommandPoolCreateInfo cmd_pool_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -321,6 +304,7 @@ swapchain_result_t create_swapchain(swapchain_t* swapchain, const device_t* devi
 			return 1;
 		}
 	}
+	printf("The swapchain resolution in pixels is %ux%u.\n", swapchain->extent.width, swapchain->extent.height);
 	return 0;
 }
 
@@ -1126,8 +1110,8 @@ int compile_shader(const shader_compilation_request_t* request) {
 		"-e ", request->entry_point, " ",
 		args, " ",
 		defines, " ",
-		"-o ", spirv_path, " ",
-		request->shader_path
+		"-o \"", spirv_path, "\" \"",
+		request->shader_path, "\"",
 	};
 	char* cmd = cat_strings(cmd_pieces, COUNT_OF(cmd_pieces));
 	int result = system(cmd);

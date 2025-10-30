@@ -1,6 +1,10 @@
 #version 460
 #extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_control_flow_attributes : enable
 #include "constants.glsl"
+#include "camera_utilities.glsl"
+
+#define M_PI 3.141592653589793238462643
 
 //! The render target containing HDR radiance values
 layout (binding = 1, input_attachment_index = 0) uniform subpassInput g_hdr_radiance;
@@ -66,11 +70,9 @@ void main() {
 	vec4 hdr_radiance = subpassLoad(g_hdr_radiance);
 	float factor = g_exposure / float(g_accum_frame_count);
 	g_out_color = hdr_radiance * vec4(vec3(factor), hdr_radiance.a);
-#if TONEMAPPER_CLAMP
-	g_out_color.rgb = clamp(g_out_color.rgb, 0.0, 1.0);
-#elif TONEMAPPER_ACES
+#if TONEMAPPER_OP_ACES
 	g_out_color.rgb = tonemapper_aces(g_out_color.rgb);
-#elif TONEMAPPER_KHRONOS_PBR_NEUTRAL
+#elif TONEMAPPER_OP_KHRONOS_PBR_NEUTRAL
 	g_out_color.rgb = tonemapper_khronos_pbr_neutral(g_out_color.rgb);
 #endif
 	// Color NaN pixels violett

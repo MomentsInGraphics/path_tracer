@@ -38,11 +38,6 @@ void control_rotation(controllable_rotation_t* rotation, GLFWwindow* window) {
 		for (uint32_t i = 0; i != 3; ++ i)
 			rotation->angles[i] = rotation->origin_angles[i] + angles_offset[i];
 	}
-	// Limit rotation along the x-axis
-	if (rotation->angles[0] < 0.0f)
-		rotation->angles[0] = 0.0f;
-	if (rotation->angles[0] > M_PI)
-		rotation->angles[0] = M_PI;
 }
 
 
@@ -61,8 +56,6 @@ void control_camera(camera_t* camera, GLFWwindow* window) {
 	float log_height_factor = 0.0f;
 	switch (camera->type) {
 		case camera_type_first_person:
-		case camera_type_hemispherical:
-		case camera_type_spherical:
 		{
 			// WASD move in the xy-plane and QE along the z-axis
 			float sin_z = sinf(camera->rotation.angles[2]);
@@ -78,7 +71,7 @@ void control_camera(camera_t* camera, GLFWwindow* window) {
 			float rotation[3 * 3];
 			rotation_matrix_from_angles(rotation, camera->rotation.angles);
 			mat_vec_mul(offset, rotation, local_offset, 3, 3);
-			log_height_factor = 0.1f * z;
+			log_height_factor = 0.01f * z;
 			break;
 		}
 		default:
@@ -122,8 +115,6 @@ void get_view_to_projection_space(float view_to_projection[4 * 4], const camera_
 	float far = camera->far;
 	switch (camera->type) {
 		case camera_type_first_person:
-		case camera_type_hemispherical:
-		case camera_type_spherical:
 		{
 			float top = tanf(0.5f * camera->fov);
 			float right = aspect_ratio * top;
@@ -164,4 +155,35 @@ void get_world_to_projection_space(float world_to_projection[4 * 4], const camer
 	get_world_to_view_space(world_to_view, camera);
 	get_view_to_projection_space(view_to_projection, camera, aspect_ratio);
 	mat_mat_mul(world_to_projection, view_to_projection, world_to_view, 4, 4, 4);
+}
+
+
+void get_camera_ray_origin(float out_origin[3], const float ray_tex_coord[2], const float proj_to_world_space[4 * 4]) {
+	float pos_0_proj[4] = { 2.0f * ray_tex_coord[0] - 1.0f, 2.0f * ray_tex_coord[1] - 1.0f, 0.0f, 1.0f };
+	float pos_0_world[4];
+	mat_vec_mul(pos_0_world, proj_to_world_space, pos_0_proj, 4, 4);
+	for (uint32_t i = 0; i != 3; ++i)
+		out_origin[i] = pos_0_world[i] / pos_0_world[3];
+}
+
+
+void get_camera_ray_direction(float out_dir[3], const float ray_tex_coord[2], const float world_to_proj_space[4 * 4]) {
+	float dir_proj[2] = { 2.0f * ray_tex_coord[0] - 1.0f, 2.0f * ray_tex_coord[1] - 1.0f };
+	// This implementation is a bit fancy. The code is automatically generated
+	// but the derivation goes as follows: Construct Pluecker coordinates of
+	// the ray in projection space, transform those to world space, then take
+	// the intersection with the plane at infinity. Of course, the parts that
+	// only operate on world_to_proj_space could be pre-computed, but 24 fused
+	// multiply-adds is not so bad and I like how broadly applicable this
+	// implementation is.
+	out_dir[0] =  (world_to_proj_space[1 * 4 + 1] * world_to_proj_space[3 * 4 + 2] - world_to_proj_space[3 * 4 + 1] * world_to_proj_space[1 * 4 + 2]) * dir_proj[0];
+	out_dir[0] += (world_to_proj_space[3 * 4 + 1] * world_to_proj_space[0 * 4 + 2] - world_to_proj_space[0 * 4 + 1] * world_to_proj_space[3 * 4 + 2]) * dir_proj[1];
+	out_dir[0] +=  world_to_proj_space[0 * 4 + 1] * world_to_proj_space[1 * 4 + 2] - world_to_proj_space[1 * 4 + 1] * world_to_proj_space[0 * 4 + 2];
+	out_dir[1] =  (world_to_proj_space[3 * 4 + 0] * world_to_proj_space[1 * 4 + 2] - world_to_proj_space[1 * 4 + 0] * world_to_proj_space[3 * 4 + 2]) * dir_proj[0];
+	out_dir[1] += (world_to_proj_space[0 * 4 + 0] * world_to_proj_space[3 * 4 + 2] - world_to_proj_space[3 * 4 + 0] * world_to_proj_space[0 * 4 + 2]) * dir_proj[1];
+	out_dir[1] +=  world_to_proj_space[1 * 4 + 0] * world_to_proj_space[0 * 4 + 2] - world_to_proj_space[0 * 4 + 0] * world_to_proj_space[1 * 4 + 2];
+	out_dir[2] =  (world_to_proj_space[1 * 4 + 0] * world_to_proj_space[3 * 4 + 1] - world_to_proj_space[3 * 4 + 0] * world_to_proj_space[1 * 4 + 1]) * dir_proj[0];
+	out_dir[2] += (world_to_proj_space[3 * 4 + 0] * world_to_proj_space[0 * 4 + 1] - world_to_proj_space[0 * 4 + 0] * world_to_proj_space[3 * 4 + 1]) * dir_proj[1];
+	out_dir[2] +=  world_to_proj_space[0 * 4 + 0] * world_to_proj_space[1 * 4 + 1] - world_to_proj_space[1 * 4 + 0] * world_to_proj_space[0 * 4 + 1];
+	normalize(out_dir, 3);
 }

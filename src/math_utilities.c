@@ -1,5 +1,6 @@
 #include "math_utilities.h"
 #include <math.h>
+#include <string.h>
 
 
 uint32_t greatest_common_divisor(uint32_t a, uint32_t b) {
@@ -64,8 +65,8 @@ void rotation_matrix_from_angles(float out_rotation[3 * 3], const float angles[3
 }
 
 
-static inline float determinant_mat4(const float mat[4 * 4]) {
-	float result;
+static inline double determinant_mat4(const double mat[4 * 4]) {
+	double result;
 	result =  24.0f * mat[0] * mat[5] * mat[10] * mat[15];
 	result -= 24.0f * mat[0] * mat[5] * mat[11] * mat[14];
 	result -= 24.0f * mat[0] * mat[6] * mat[9] * mat[15];
@@ -94,7 +95,7 @@ static inline float determinant_mat4(const float mat[4 * 4]) {
 }
 
 
-static inline void adjoint_mat4(float result[4 * 4], const float mat[4 * 4]) {
+static inline void adjoint_mat4(double result[4 * 4], const double mat[4 * 4]) {
 	result[15] =  6.0f * mat[0] * mat[5] * mat[10];
 	result[11] = -6.0f * mat[0] * mat[5] * mat[11];
 	result[15] -= 6.0f * mat[0] * mat[6] * mat[9];
@@ -194,10 +195,21 @@ static inline void adjoint_mat4(float result[4 * 4], const float mat[4 * 4]) {
 }
 
 
-void invert_mat4(float out_inv[4 * 4], float mat[4 * 4]) {
-	float det = determinant_mat4(mat);
-	adjoint_mat4(out_inv, mat);
-	float scale = 4.0f / det;
+void invert_mat4(float out_inv[4 * 4], const float mat[4 * 4]) {
+	double copy[4 * 4];
 	for (uint32_t i = 0; i != 4 * 4; ++i)
-		out_inv[i] *= scale;
+		copy[i] = mat[i];
+	double det = determinant_mat4(copy);
+	double inv[4 * 4];
+	adjoint_mat4(inv, copy);
+	double scale = 4.0f / det;
+	for (uint32_t i = 0; i != 4 * 4; ++i)
+		out_inv[i] = (float) (inv[i] * scale);
+}
+
+
+void pad_mat3x4_to_mat4(float out_padded[3 * 4], const float mat[3 * 4]) {
+	memcpy(out_padded, mat, sizeof(float) * 3 * 4);
+	out_padded[12] = out_padded[13] = out_padded[14] = 0.0f;
+	out_padded[15] = 1.0f;
 }

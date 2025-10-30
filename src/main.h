@@ -1,8 +1,8 @@
 #pragma once
 #include "vulkan_basics.h"
-#include "scene.h"
 #include "camera.h"
 #include "nuklear.h"
+#include "compute_graph.h"
 #include <stdbool.h>
 #include <stdio.h>
 
@@ -10,98 +10,369 @@
 //! The number of frames in flight, i.e. how many frames the host submits to
 //! the GPU before waiting for the oldest one to finish
 #define FRAME_IN_FLIGHT_COUNT 3
-//! The maximal number of spherical lights that can be placed in the scene.
-//! When changing this, also change the array size in shaders/constants.glsl.
-#define MAX_SPHERICAL_LIGHT_COUNT 32
+//! How many attributes are stored per brick to accelerate volume rendering
+//! (grid_indices.glsl provides a list)
+#define GRID_ATTRIBUTE_COUNT 5
+//! The maximal number of cameras that can be utilized simultaneously
+#define MAX_CAMERA_COUNT 1
 //! The maximal number of slides
-#define MAX_SLIDE_COUNT 100
-
-
-//! An enumeration of available scenes (i.e. *.vks files)
-typedef enum {
-	scene_file_bistro_outside,
-	scene_file_cornell_box,
-	scene_file_arcade,
-	scene_file_attic,
-	scene_file_bistro_inside,
-	scene_file_living_room_day,
-	scene_file_living_room_night,
-	//! Number of different scenes
-	scene_file_count,
-} scene_file_t;
+#define MAX_SLIDE_COUNT 300
 
 
 //! Available tonemapping operators
 typedef enum {
 	//! Simply convert the linear radiance values to sRGB, clamping channels
 	//! that are above 1
-	tonemapper_clamp,
+	tonemapper_op_clamp,
 	//! The tonemapper from the Academy Color Encoding System
-	tonemapper_aces,
+	tonemapper_op_aces,
 	//! The Khronos PBR neutral tone mapper as documented here:
 	//! https://github.com/KhronosGroup/ToneMapping/blob/main/PBR_Neutral/README.md
-	tonemapper_khronos_pbr_neutral,
+	tonemapper_op_khronos_pbr_neutral,
 	//! The number of available tonemapping operators
-	tonemapper_count,
+	tonemapper_op_count,
 	//! Used to force an int32_t
-	tonemapper_force_int_32 = 0x7fffffff,
-} tonemapper_t;
+	tonemapper_op_force_int_32 = 0x7fffffff,
+} tonemapper_op_t;
 
+
+//! Defines how the color and extinction of the volume are determined
+typedef enum {
+	//! The albedo of the volume is a constant, user-defined color, the
+	//! extinction is as defined in the volume
+	volume_color_mode_constant,
+	//! The albedo of the volume is taken from a transfer function, the
+	//! extinction is as defined in the volume
+	volume_color_mode_transfer_function,
+	/*! The albedo of the volume is taken from a transfer function, the
+		extinction is replaced by the alpha from this transfer function,
+		scaled by the user-defined extinction factor.*/
+	volume_color_mode_transfer_function_with_extinction,
+	//! There are two separate volumes: One holds extinction values, the other
+	//! holds colors.
+	volume_color_mode_separate,
+	//! Number of different modes
+	volume_color_mode_count,
+	//! Used to force an int32_t
+	volume_color_mode_force_int_32 = 0x7fffffff,
+} volume_color_mode_t;
+
+
+//! An enumeration of all supported modes of interpolation for volume data
+typedef enum {
+	//! Nearest-neighbor interpolation
+	volume_interpolation_nearest,
+	//! Trilinear interpolation
+	volume_interpolation_linear,
+	//! Approximate trilinear interpolation using stochastic jittering of ray
+	//! origins
+	volume_interpolation_linear_stochastic,
+	//! Number of available interpolation methods
+	volume_interpolation_count,
+	//! Used to force an int32_t
+	volume_interpolation_force_int_32 = 0x7fffffff,
+} volume_interpolation_t;
+
+
+//! Different compression methods for low-resolution grids derived from a high-
+//! resolution volume texture
+typedef enum {
+	//! Corresponds to VK_FORMAT_R16_SFLOAT
+	grid_compression_float_16,
+	//! Corresponds to VK_FORMAT_BC4_UNORM_BLOCK
+	grid_compression_bc4,
+	//! Number of available compression methods
+	grid_compression_count,
+	//! Used to force an int32_t for the enum (not a compression technique)
+	grid_compression_force_int_32 = 0x7fffffff,
+} grid_compression_t;
+
+
+//! Enumerates all available techniques for distance sampling in volume
+//! rendering
+typedef enum {
+	//! Ray marching with uniform jittered sampling. This method is biased.
+	distance_sampler_ray_marching,
+	//! Regular tracking
+	distance_sampler_regular_tracking,
+	//! Delta tracking based on null scattering with upper bounds on extinction
+	distance_sampler_delta_tracking,
+	//! Number of available techniques
+	distance_sampler_count,
+	//! Used to force an int32_t
+	distance_sampler_force_int_32 = 0x7fffffff,
+} distance_sampler_t;
+
+
+//! The technique used to estimate optical depth for techniques that rely on
+//! unbiased, independent, identically distributed estimates.
+typedef enum {
+	/*! Ray marching with roughly equidistant steps and user-defined sample
+		count. If uniform jittered sampling is enabled, they are exactly
+		equidistant.*/
+	optical_depth_estimator_equidistant,
+	/*! Ray marching with adaptive sample count and importance sampling based
+		on mean extinction as described by Kettunen et al. [2021]:
+		https://doi.org/10.1145/3450626.3459937 */
+	optical_depth_estimator_kettunen,
+	//! Places samples in proportion to the mean estimated on the low-
+	//! resolution grid and evaluates without using a control variate.
+	optical_depth_estimator_mean_sampling,
+	//! Same importance sampling as for optical_depth_estimator_mean_sampling
+	//! but with a fixed sample count
+	optical_depth_estimator_mean_sampling_fixed_count,
+	/*! Uses a control variate w.r.t. the minimal extinction at low resolution.
+		The sample density follows the square root of second moments of
+		extinctions on the low resolution, relative to the minimum.*/
+	optical_depth_estimator_variance_aware,
+	//! Same importance sampling as for optical_depth_estimator_variance_aware
+	//! but with a fixed sample count
+	optical_depth_estimator_variance_aware_fixed_count,
+	//! Number of available techniques
+	optical_depth_estimator_count,
+	//! Used to force an int32_t
+	optical_depth_estimator_force_int_32 = 0x7fffffff,
+} optical_depth_estimator_t;
+
+
+//! Enumerates all available techniques for transmittance estimation in volume
+//! rendering
+typedef enum {
+	//! Always estimates the transmittance to be one. Can be useful for
+	//! timings of distance sampling that are not contaminated by the cost of
+	//! transmittance estimation.
+	transmittance_estimator_dummy,
+	//! An unbiased ray-marching transmittance estimator as described by
+	//! Kettunen et al. [2021]: https://doi.org/10.1145/3450626.3459937
+	transmittance_estimator_unbiased_ray_marching,
+	//! A biased ray-marching transmittance estimator as described by Kettunen
+	//! et al. [2021]: https://doi.org/10.1145/3450626.3459937
+	transmittance_estimator_biased_ray_marching,
+	/*! A ray-marching transmittance estimator that estimates mean and variance
+		of optical depth and uses that to reduce its bias by assuming a
+		Gaussian distribution.*/
+	transmittance_estimator_jackknife,
+	//! Regular tracking
+	transmittance_estimator_regular_tracking,
+	//! Track length estimation (with a binary outcome) based on upper bounds
+	//! on extinction
+	transmittance_estimator_track_length,
+	//! Ratio tracking based on null scattering with upper bounds on extinction
+	transmittance_estimator_ratio_tracking,
+	//! Number of available techniques
+	transmittance_estimator_count,
+	//! Used to force an int32_t
+	transmittance_estimator_force_int_32 = 0x7fffffff,
+} transmittance_estimator_t;
+
+
+//! Enumerates all available techniques to estimate transmittance-weighted MIS
+//! weights in volume rendering
+typedef enum {
+	//! A dummy technique that returns the result for a transmittance of zero
+	mis_weight_estimator_dummy,
+	//! Our estimation of MIS weights using a power series and ray marching
+	mis_weight_estimator_unbiased_ray_marching,
+	//! Our estimation of MIS weights using a degree-zero power series and ray
+	//! marching
+	mis_weight_estimator_biased_ray_marching,
+	//! Our estimation of MIS weights using jackknife statistics
+	mis_weight_estimator_jackknife,
+	//! Exact computation of the MIS weight through exact transmittance
+	//! computation
+	mis_weight_estimator_regular_tracking,
+	//! Number of available techniques
+	mis_weight_estimator_count,
+	//! Used to force an int32_t
+	mis_weight_estimator_force_int_32 = 0x7fffffff,
+} mis_weight_estimator_t;
+
+
+//! Which sampling strategies are being used and how they are being combined
+typedef enum {
+	//! Distance sampling based on the light source
+	sampling_strategies_light,
+	//! Distance sampling proportional to extinction times transmittance
+	sampling_strategies_transmittance,
+	//! A combination of light and transmittance-based distance sampling using
+	//! multiple importance sampling with the balance heuristic
+	sampling_strategies_light_transmittance_mis,
+	//! A combination of light and transmittance-based distance sampling using
+	//! multiple importance sampling in such a way that biased MIS weights do
+	//! not cause bias in the overall estimate.
+	sampling_strategies_light_transmittance_approximate_mis,
+	/*! A combination of light and transmittance-based distance sampling, which
+		uses paths with null-scattering vertices to implement multiple
+		importance sampling: https://doi.org/10.1145/3306346.3323025 */
+	sampling_strategies_light_transmittance_miller_mis,
+	//! The number of available strategies
+	sampling_strategies_count,
+	//! Used to force an int32_t
+	sampling_strategies_force_int_32 = 0x7fffffff,
+} sampling_strategies_t;
+
+
+//! An enumeration of different quantities that may get accumulated in the
+//! frame buffer. Mostly used for debugging and analysis.
+typedef enum {
+	//! RGB radiance estimates, i.e. a proper rendering
+	displayed_quantity_radiance,
+	//! Luminance estimates as red, squares of luminance estimates (i.e. second
+	//! moments) as green, sample counts as blue
+	displayed_quantity_luminance_stats,
+	//! Transmittance estimates, replicated to all three color channels
+	displayed_quantity_transmittance,
+	//! Transmittance estimates as red, squares of transmittance estimates
+	//! (i.e. second moments) as green, sample counts as blue
+	displayed_quantity_transmittance_stats,
+	//! Transmittance estimates as red, 1 in green if their sign was negative,
+	//! 0 otherwise
+	displayed_quantity_transmittance_sign,
+	//! A generalized MIS weight with user-defined parameters in all channels
+	displayed_quantity_mis_weight,
+	//! Like displayed_quantity_transmittance_stats but with MIS weights
+	displayed_quantity_mis_weight_stats,
+	//! The number of available options
+	displayed_quantity_count,
+	//! Used to force an int32_t
+	displayed_quantity_force_int_32 = 0x7fffffff,
+} displayed_quantity_t;
+
+
+//! A specification of a high-dynamic range color that can be conveniently
+//! edited in a user interface
+typedef struct {
+	//! The color as (non-linear) sRGB
+	float srgb_color[3];
+	//! A brightness scaling factor that applies to the linear color (Rec. 709)
+	float linear_factor;
+} hdr_color_spec_t;
+
+
+//! An idealized point light with equal emission into all directions
+typedef struct {
+	//! The position of the point light
+	float pos[3];
+	//! The radiant power of the point light
+	hdr_color_spec_t power;
+} point_light_t;
+
+
+//! The representation of a point light in a constant buffer, including padding
+typedef struct {
+	float pos[3], pad_0, power[3], importance;
+} point_light_constants_t;
 
 
 /*! A complete specification of what is to be rendered without specifying
 	different techniques that are supposed to render the same thing. This
 	struct is what quicksave/quickload deal with.*/
 typedef struct {
-	//! The scene file that is to be loaded
-	scene_file_t scene_file;
-	//! The camera used to observe the scene
-	camera_t camera;
+	//! The cameras used to observe the scene
+	camera_t cameras[MAX_CAMERA_COUNT];
+
 	//! The tonemapping operator used to present colors
-	tonemapper_t tonemapper;
+	tonemapper_op_t tonemapper;
 	//! The factor by which HDR radiance is scaled during tonemapping
 	float exposure;
+
+	//! The file path or file path pattern from which one or more volumes will
+	//! be loaded
+	char* volume_file_path;
+	/*! The file path for the compute shader that is to be used to turn volumes
+		loaded from files into volumes for display. An empty string indicates
+		that the first loaded volume is used as is.*/
+	char* volume_shader_path;
+	//! Defines how colors are computed for a volume
+	volume_color_mode_t volume_color_mode;
+	//! When a constant color is used as volume albedo, it is this color
+	hdr_color_spec_t volume_color_constant;
+	/*! When a transfer function is used, this is the value from the volume
+		texture that maps to the left/right-most value in the transfer
+		function. Everything beyond that uses the same color.*/
+	float transfer_min_input, transfer_max_input;
+	//! Whether the transfer function should use bilinear interpolation (true)
+	//! or nearest neighbor
+	bool interpolate_transfer_function;
+	//! The factor by which volume extinctions are multiplied before they are
+	//! used for any purpose
+	float extinction_factor;
+	//! The droplet size (diameter in micrometers) used to control the Mie-
+	//! scattering phase function
+	float droplet_size;
+	//! How values in the volume are being interpolated
+	volume_interpolation_t volume_interpolation;
+
+	//! The file path of the transfer function to be used
+	char* transfer_function_path;
+
 	//! The index of the frame being rendered for the purpose of random seed
 	//! generation
 	uint32_t frame_index;
-	//! The color of the sky (using Rec. 709, a.k.a. linear sRGB)
-	float sky_color[3];
-	//! A factor applied to the sky color to get radiance
-	float sky_strength;
-	//! The color of light emitted by the material called _emission (Rec. 709)
-	float emission_material_color[3];
-	//! A factor applied to the emission color to get radiance
-	float emission_material_strength;
+
+	//! Whether ambient light should be used at all
+	bool use_ambient_light;
+	//! The file path to the light probe that is being used (a *.hdr file)
+	char* light_probe_path;
+	//! The radiance emitted by the ambient space in all directions
+	hdr_color_spec_t ambient_radiance;
+	/*! A scaling factor for the ambient radiance when it is used to illuminate
+		a volume rather than being observed directly. This is a non-physical
+		hack to avoid overexposure of the background.*/
+	float ambient_lighting_factor;
+
+	//! Number of point lights in the scene
+	uint64_t point_light_count;
+	//! Point lights in the scene
+	point_light_t* point_lights;
+
 	//! Four floats that can be controlled from the GUI directly and can be
 	//! used for any purpose while developing shaders
 	float params[4];
 } scene_spec_t;
 
 
-//! Different sampling strategies to use in a path tracer. More detailed
-//! documentation is available in the path_trace_*() functions in the shader.
-typedef enum {
-	//! Sampling of the hemisphere by choosing spherical coordinates uniformly
-	sampling_strategy_spherical,
-	//! Projected-solid angle sampling in the whole hemisphere
-	sampling_strategy_psa,
-	//! BRDF sampling
-	sampling_strategy_brdf,
-	//! Next event estimation
-	sampling_strategy_nee,
-	//! The number of different sampling strategies
-	sampling_strategy_count,
-} sampling_strategy_t;
-
-
 //! A specification of all the techniques and parameters used to render the
 //! scene without specifying the scene itself
 typedef struct {
-	//! The sampling strategy to use for path tracing
-	sampling_strategy_t sampling_strategy;
-	//! The maximal number of vertices along a path, excluding the one at the
-	//! eye
-	uint32_t path_length;
+	//! Whether jittering of primary rays is enabled or not
+	bool jitter_primary_rays;
+	//! The brick size as edge length in voxels used to generate the
+	//! low-resolution grids
+	uint32_t brick_size;
+	//! The method used to compress low-resolution grids
+	grid_compression_t grid_compression;
+	//! The technique used to sample free-flight distances in the volume
+	distance_sampler_t distance_sampler;
+	//! The technique used to estimate optical depth
+	optical_depth_estimator_t optical_depth_estimator;
+	//! Whether jittered (false) or uniform  jittered (true) sampling should be
+	//! used to estimate optical depth
+	bool uniform_jittered;
+	//! The technique used to estimate transmittance for segments through the
+	//! volume
+	transmittance_estimator_t transmittance_estimator;
+	//! The technique used to estimate transmittance-weighted MIS weights for
+	//! distance sampling
+	mis_weight_estimator_t mis_weight_estimator;
+	//! Which sampling strategies are being used and how they are being
+	//! combined
+	sampling_strategies_t sampling_strategies;
+	//! Which quantities should be rendered to the HDR buffer
+	displayed_quantity_t displayed_quantity;
+	//! The number of samples to be used for volumetric ray marching
+	uint32_t ray_march_sample_count;
+	/*! The spacing between two samples at high resolution in terms of the
+		integral over the unnormalized density computed from low-resolution
+		values. Antiproportional to the sample count.*/
+	float optical_depth_cdf_step;
+	//! A factor for the sample count used by techniques of Kettunen et al.
+	float kettunen_sample_multiplier;
+	//! The number of samples per pixel per frame per type of sample
+	uint32_t sample_count;
+	//! In experiments where generalized MIS weights are being displayed
+	//! directly, these are the used parameters
+	float mis_weight_numerator[2], mis_weight_denominator[2];
 } render_settings_t;
 
 
@@ -111,9 +382,11 @@ typedef enum {
 	image_file_format_png,
 	//! Joint Photographic Experts Group (JPEG) using 3*8-bit RGB
 	image_file_format_jpg,
+	//! High-dynamic range image with shared exponent format
+	image_file_format_hdr,
 	//! High-dynamic range image with 3*32-bit RGB using single-precision
 	//! floats
-	image_file_format_hdr,
+	image_file_format_pfm,
 } image_file_format_t;
 
 
@@ -124,6 +397,12 @@ typedef struct {
 	char* quicksave;
 	//! The render settings to use for this slide
 	render_settings_t render_settings;
+	//! An override for the used volume interpolation or an invalid value to
+	//! use what the quicksave specifies
+	volume_interpolation_t volume_interpolation;
+	//! An override for the used tonemapper or an invalid value to use what the
+	//! quicksave specifies
+	tonemapper_op_t tonemapper;
 	//! The file path to which a screenshot should be saved or NULL if no
 	//! screen shot should be saved
 	char* screenshot_path;
@@ -206,6 +485,9 @@ typedef struct {
 	//! frame being rendered, thanks to a copy command at the start of
 	//! rendering
 	buffers_t buffer;
+	//! Whether the cursor has been disabled because a property value is being
+	//! dragged
+	bool cursor_disabled;
 } gui_t;
 
 
@@ -226,34 +508,43 @@ typedef enum {
 typedef struct {
 	//! All the render targets, indexed by render_target_index_t
 	images_t targets;
-	//! The number of frames which have been accumulated in the HDR radiance
+	//! The number of samples which have been accumulated in the HDR radiance
 	//! render target
 	uint32_t accum_frame_count;
 } render_targets_t;
 
 
-//! The CPU-side version of the constants defined in constants.glsl. Refer to
-//! this file for member documentation. Includes padding as required by GLSL.
+/*! The CPU-side version of the constants defined in constants.glsl. Refer to
+	this file for member documentation. Includes padding as required by GLSL.
+	Variable-size arrays are excluded.*/
 typedef struct {
-	float world_to_projection_space[4 * 4];
-	float projection_to_world_space[4 * 4];
-	float camera_pos[3];
-	int camera_type;
-	float hemispherical_camera_normal[3];
-	float pad_1;
-	float dequantization_factor[3], pad_2, dequantization_summand[3], pad_3;
+	float world_to_projection_space[MAX_CAMERA_COUNT][4 * 4];
+	float projection_to_world_space[MAX_CAMERA_COUNT][4 * 4];
+	float viewport_transforms[MAX_CAMERA_COUNT][4];
 	float viewport_size[2], inv_viewport_size[2];
 	float exposure;
 	uint32_t frame_index;
 	uint32_t accum_frame_count;
-	float pad_4;
-	float sky_radiance[3];
-	float pad_5;
-	float emission_material_radiance[3];
-	float pad_6;
+	uint32_t frame_sample_count;
+	float volume_extent[3], pad_3, inv_volume_extent[3], pad_4;
+	float volume_color_constant[3];
+	float transfer_min_input, transfer_max_input, transfer_input_factor, transfer_input_summand;
+	float extinction_factor;
+	float mie_fit_params[4];
+	float brick_counts[3], pad_6, inv_brick_counts[3];
+	uint32_t brick_size; // 4
+	float brick_size_float, inv_brick_size;
+	float ambient_brightness;
+	float ambient_lighting_factor; // 4
+	float inv_light_probe_luminance_integral;
+	uint32_t ray_march_sample_count;
+	float inv_ray_march_sample_count;
+	float kettunen_sample_multiplier; // 4
+	float optical_depth_cdf_step, pad_7;
+	float mis_weight_numerator[2]; // 4
+	float mis_weight_denominator[2], pad_8[2]; // 4
 	float params[4];
-	float spherical_lights[MAX_SPHERICAL_LIGHT_COUNT][4];
-} constants_t;
+} fixed_size_constants_t;
 
 
 //! Handles all constant buffers that the application works with
@@ -271,16 +562,84 @@ typedef struct {
 } constant_buffers_t;
 
 
-//! The triangle mesh that is being displayed and a specification of the light
-//! sources in this scene
+//! One or more volumes to be visualized. This is the version of the volumes
+//! prior to mapping.
 typedef struct {
-	//! The triangle mesh that is being displayed
-	scene_t scene;
-	//! The number of spherical lights placed in the scene
-	uint32_t spherical_light_count;
-	//! Positions and radii of all spherical lights
-	float spherical_lights[MAX_SPHERICAL_LIGHT_COUNT][4];
-} lit_scene_t;
+	//! The number of 3D volumes held by this object.
+	uint32_t volume_count;
+	/*! Either a format string that expects one uint32_t to produce the file
+		path of the volume with a given index, or NULL if the path from the
+		scene specification is used directly.*/
+	char* file_path_pattern;
+	//! A file for each volume, from which it is being loaded. NULL pointers
+	//! once loading has concluded.
+	FILE** files;
+	//! Consecutive 3x4 matrices describing the tranform from texel space to
+	//! world space for each volume
+	float* texel_to_world_space;
+	//! One 3D image per volume
+	images_t volume;
+} volume_t;
+
+
+/*! Various kinds of acceleration structures (AS) used for volume rendering and
+	the compute workloads needed to keep them up to date when the volume
+	changes. For the most part these are just grids with various aggregate
+	quantities but if there is a volume shader it is also handled here.*/
+typedef struct {
+	//! If there is no volume shader, this object is empty. Otherwise, it holds
+	//! the output values and optionally output colors of the volume shader.
+	images_t shaded_volume;
+	//! One 3D image per grid of precomputed quantities. Indices match
+	//! grid_indices.glsl.
+	images_t grids;
+	/*! The first buffer holds one float[4] per grid to store dequantization
+		parameters. Additionally, when BC4 compression is used, there is one
+		buffer per grid holding intermediate values and output of the reduce
+		operation to produce statistics needed to determine optimal
+		quantization coefficients.*/
+	buffers_t grid_props;
+	//! Image views to sample block-compressed textures (if available)
+	VkImageView bc_views[GRID_ATTRIBUTE_COUNT];
+	//! A compute workload that, when dispatched, turns the current data of the
+	//! volume into the required grids
+	compute_workload_t workload;
+	/*! The transfer_min_input and transfer_max_input values of scene_spec_t
+		that were used when the compute workload was last run. Used to detect
+		the need to rerun it. Both zero if it was not run at all.*/
+	float transfer_min_input, transfer_max_input;
+} volume_as_t;
+
+
+//! An RGB and HDR light probe in spherical coordinates along with an alias
+//! table for importance sampling
+typedef struct {
+	//! Image data of the HDR image or NULL once creation has finished
+	float* image_data;
+	//! The HDR light probe using an RGBA format
+	images_t probe;
+	//! A buffer for the alias table
+	buffers_t alias_table;
+	//! The sum of all the weights that were used to build the alias table
+	float weight_sum;
+	//! The sampler used to sample the light probe
+	VkSampler sampler;
+} light_probe_t;
+
+
+//! Holds a transfer function in the form of a 1D texture
+typedef struct {
+	//! A single 1D image describing the transfer function
+	images_t transfer_function;
+	//! The name of the transfer function that is being used
+	char* name;
+	//! If the transfer function specified in scene specification is not found,
+	//! a sensible default is used and this bool is true.
+	bool found;
+	//! A sampler with linear or nearest-neighbor interpolation used to access
+	//! the transfer function
+	VkSampler sampler;
+} transfer_function_t;
 
 
 //! The render pass that performs all rasterization work for rendering one
@@ -298,8 +657,10 @@ typedef struct {
 
 //! The objects needed for a subpass that renders the scene
 typedef struct {
-	//! A sampler for material textures
-	VkSampler sampler;
+	//! A sampler for 2D textures
+	VkSampler texture_sampler;
+	//! A sampler for volume textures
+	VkSampler volume_sampler;
 	//! The descriptor set used to render the scene
 	descriptor_sets_t descriptor_set;
 	//! A graphics pipelines used to render the scene, which discards the
@@ -396,7 +757,10 @@ typedef struct {
 	swapchain_t swapchain;
 	render_targets_t render_targets;
 	constant_buffers_t constant_buffers;
-	lit_scene_t lit_scene;
+	transfer_function_t transfer_function;
+	volume_t volume;
+	volume_as_t volume_as;
+	light_probe_t light_probe;
 	render_pass_t render_pass;
 	scene_subpass_t scene_subpass;
 	tonemap_subpass_t tonemap_subpass;
@@ -409,7 +773,7 @@ typedef struct {
 	the boolean is true, the object and all objects that depend on it will be
 	freed and recreated by update_app().*/
 typedef struct {
-	bool device, window, gui, swapchain, render_targets, constant_buffers, lit_scene, render_pass, scene_subpass, tonemap_subpass, gui_subpass, frame_workloads;
+	bool device, window, gui, swapchain, render_targets, constant_buffers, transfer_function, volume, volume_as, light_probe, render_pass, scene_subpass, tonemap_subpass, gui_subpass, frame_workloads;
 } app_update_t;
 
 
@@ -425,22 +789,15 @@ typedef struct {
 } screenshot_t;
 
 
-/*! Outputs the name, the path to the *.vks file, to the textures, to the
-	lights and to the quicksave for the given scene file. Returns 0 upon
-	success. Output strings must not be freed. Passing NULL for strings that
-	are not required is legal.*/
-int get_scene_file(scene_file_t scene_file, const char** scene_name, const char** scene_file_path, const char** texture_path, const char** light_path, const char** quicksave_path);
+//! Saves the scene specification to the given quicksave file (overwriting it).
+//! Returns 0 upon success. path defaults to data/quicksave.jack_save.
+int quicksave(const scene_spec_t* spec, const char* path);
 
 
-//! Saves the scene specification to the quicksave file (overwriting it).
-//! Returns 0 upon success.
-int quicksave(const scene_spec_t* spec);
-
-
-/*! Loads the scene specification from the quicksave file and flags required
-	application updates. Pass NULL as save_path for a default. Returns 0 upon
-	success.*/
-int quickload(scene_spec_t* spec, app_update_t* update, const char* save_path);
+/*! Loads the scene specification from the given quicksave file and flags
+	required application updates. Returns 0 upon success. path defaults to
+	data/quicksave.jack_save.*/
+int quickload(scene_spec_t* spec, app_update_t* update, const char* path);
 
 
 //! Given an old and a new scene specification, this function marks the updates
@@ -448,13 +805,40 @@ int quickload(scene_spec_t* spec, app_update_t* update, const char* save_path);
 void get_scene_spec_updates(app_update_t* update, const scene_spec_t* old_spec, const scene_spec_t* new_spec);
 
 
-//! Initializes the given scene specification with defaults or loads it from a
-//! quicksave
-void init_scene_spec(scene_spec_t* spec);
+//! Given an old and a new set of rendering settings, this function marks the
+//! updates that need to be performed in response to this change
+void get_render_settings_updates(app_update_t* update, const render_settings_t* old_settings, const render_settings_t* new_settings);
+
+
+//! Returns true if sample accumulation in progressive rendering should be
+//! reset because the scene spec or render settings have changed
+bool check_accumulation_reset(const scene_spec_t* old_spec, const scene_spec_t* new_spec, const render_settings_t* old_settings, const render_settings_t* new_settings, const app_params_t* old_params, const app_params_t* new_params);
+
+
+//! Not every combination of techniques can render every scene. This function
+//! modifies the given render settings in place to ensure that they can.
+void make_render_settings_valid(render_settings_t* settings, const scene_spec_t* scene_spec);
+
+
+/*! Returns the scene specification with all entries set to defaults. The
+	calling side is responsible for freeing it, but when allow_malloc is false
+	fields that require memory allocation will be left zero initialized.*/
+scene_spec_t get_default_scene_spec(bool allow_malloc);
+
+
+//! Creates a deep copy of the given scene spec
+scene_spec_t copy_scene_spec(const scene_spec_t* spec);
+
+
+void free_scene_spec(scene_spec_t* spec);
 
 
 //! Initializes the given render settings with defaults
 void init_render_settings(render_settings_t* settings);
+
+
+//! Turns a color specification into a Rec. 709 (a.k.a. linear sRGB) color
+void get_linear_color(float linear_color[3], const hdr_color_spec_t* color_spec);
 
 
 //! Writes all available slides into the given array and returns the slide
@@ -508,7 +892,7 @@ void free_render_targets(render_targets_t* render_targets, const device_t* devic
 
 
 //! \see constant_buffers_t
-int create_constant_buffers(constant_buffers_t* constant_buffers, const device_t* device);
+int create_constant_buffers(constant_buffers_t* constant_buffers, const device_t* device, const scene_spec_t* scene_spec, const volume_t* volume);
 
 
 void free_constant_buffers(constant_buffers_t* constant_buffers, const device_t* device);
@@ -519,12 +903,46 @@ void free_constant_buffers(constant_buffers_t* constant_buffers, const device_t*
 int write_constant_buffer(constant_buffers_t* constant_buffers, const app_t* app, uint32_t buffer_index);
 
 
-//! Forwards to load_scene() using parameters that are appropriate for the
-//! given scene specification and additionally loads light sources
-int create_lit_scene(lit_scene_t* lit_scene, const device_t* device, const scene_spec_t* scene_spec);
+//! \see volume_t
+int create_volume(volume_t* volume, const device_t* device, const scene_spec_t* scene);
 
 
-void free_lit_scene(lit_scene_t* lit_scene, const device_t* device);
+void free_volume(volume_t* volume, const device_t* device);
+
+
+//! \see volume_as_t
+int create_volume_acceleration_structure(volume_as_t* as, const device_t* device, const volume_t* volume, const transfer_function_t* transfer, const constant_buffers_t* constants, const scene_spec_t* scene_spec, const render_settings_t* settings);
+
+
+void free_volume_acceleration_structure(volume_as_t* as, const device_t* device);
+
+
+//! Returns a pointer to the volume texture after volume shading (if any) and
+//! before application of a transfer function (if any)
+static inline const image_t* get_volume_values(const volume_t* volume, const volume_as_t* as) {
+	return (as->shaded_volume.image_count > 0) ? &as->shaded_volume.images[0] : &volume->volume.images[0];
+}
+
+
+//! Returns a pointer to the volume texture holding colors per voxel or NULL if
+//! that does not exist
+static inline const image_t* get_volume_colors(const volume_as_t* as) {
+	return (as->shaded_volume.image_count > 1) ? &as->shaded_volume.images[1] : NULL;
+}
+
+
+//! \see transfer_function_t
+int create_transfer_function(transfer_function_t* transfer, const device_t* device, const scene_spec_t* spec);
+
+
+void free_transfer_function(transfer_function_t* transfer, const device_t* device);
+
+
+//! \see light_probe_t
+int create_light_probe(light_probe_t* probe, const device_t* device, const char* probe_path);
+
+
+void free_light_probe(light_probe_t* probe, const device_t* device);
 
 
 //! \see render_pass_t
@@ -535,7 +953,7 @@ void free_render_pass(render_pass_t* render_pass, const device_t* device);
 
 
 //! \see scene_subpass_t
-int create_scene_subpass(scene_subpass_t* subpass, const device_t* device, const scene_spec_t* scene_spec, const render_settings_t* render_settings, const swapchain_t* swapchain, const constant_buffers_t* constant_buffers, const lit_scene_t* lit_scene, const render_pass_t* render_pass);
+int create_scene_subpass(scene_subpass_t* subpass, const device_t* device, const scene_spec_t* scene_spec, const render_settings_t* settings, const swapchain_t* swapchain, const constant_buffers_t* constant_buffers, const volume_t* volume, const volume_as_t* as, const transfer_function_t* transfer, const light_probe_t* probe, const render_pass_t* render_pass);
 
 
 void free_scene_subpass(scene_subpass_t* subpass, const device_t* device);
@@ -597,6 +1015,17 @@ void free_app(app_t* app);
 bool key_pressed(GLFWwindow* window, int key_code);
 
 
+/*! Computes the camera ray for a given pixel.
+	\param out_ray_origin The output world-space ray origin.
+	\param out_ray_direction The output normalized world-space ray direction.
+	\param camera The used camera.
+	\param viewport left, right, top, bottom in pixels of the viewport as
+		produced by compute_camera_viewports().
+	\param pixel The screen-space coordinate for which a ray should be computed
+		in pixels.*/
+void get_camera_ray(float out_ray_origin[3], float out_ray_dir[3], const camera_t* camera, const float viewport[4], const float pixel[2]);
+
+
 /*! Responds to user input, updating the state of the given app accordingly and
 	triggering all sorts of requested actions. Invoke this once per frame.
 	\param app The app whose state is to be updated.
@@ -605,16 +1034,27 @@ bool key_pressed(GLFWwindow* window, int key_code);
 int handle_user_input(app_t* app, app_update_t* update);
 
 
+//! Computes the viewport for each camera. Outputs tuples (left, right, top,
+//! bottom) with coordinates in pixels.
+void compute_camera_viewports(float viewports[MAX_CAMERA_COUNT][4], const VkExtent2D* swapchain_extent, const scene_spec_t* scene_spec, const app_params_t* app_params);
+
+
 /*! Defines the GUI for one frame with all of its windows and elements and
 	updates application state.
 	\param ctx The Nuklear context to be used for the GUI.
 	\param scene_spec Scene specification to be modified.
 	\param render_settings Render settings to be modified.
 	\param update Used to report required updates.
-	\param render_targets Used to query the sample count.
+	\param app_params Used to get the GUI extent.
+	\param render_targets Used to report the accumulated sample count.
+	\param volume Used to fit cameras to view.
+	\param transfer Used to display whether the desired file was found.
+	\param swapchain Used to query the resolution.
 	\param timestamps The timestamps from frame_workloads_t.
-	\param timestamp_period The value from VkPhysicalDeviceLimits::timestampPeriod.*/
-void define_gui(struct nk_context* ctx, scene_spec_t* scene_spec, render_settings_t* render_settings, app_update_t* update, const render_targets_t* render_targets, uint64_t timestamps[timestamp_index_count], float timestamp_period);
+	\param timestamp_period The value from VkPhysicalDeviceLimits::timestampPeriod.
+	\return true iff text entry is active such that other things depending on
+		letter keys (e.g. camera controls) should seize to take input.*/
+bool define_gui(struct nk_context* ctx, scene_spec_t* scene_spec, render_settings_t* render_settings, app_update_t* update, app_params_t* app_params, const render_targets_t* render_targets, const volume_t* volume, const transfer_function_t* transfer, const swapchain_t* swapchain, uint64_t timestamps[timestamp_index_count], float timestamp_period);
 
 
 /*! Updates constant buffers, takes care of synchronization, renders a single

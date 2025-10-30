@@ -1,35 +1,55 @@
 cmake_policy(SET CMP0076 NEW)
-target_sources(path_tracer PRIVATE
+target_sources(volume_renderer PRIVATE
+	alias_table.c
+	alias_table.h
 	camera.c
 	camera.h
+	compute_graph.h
+	compute_graph.c
 	main.c
 	main.h
 	math_utilities.c
 	math_utilities.h
 	nuklear.c
 	nuklear.h
-	scene.c
-	scene.h
+	pfm.c
+	pfm.h
+	phase_functions.h
+	phase_functions.c
+	serializer.c
+	serializer.h
 	slides.c
+	stb_image.c
 	stb_image_write.c
 	string_utilities.h
 	string_utilities.c
-	textures.c
-	textures.h
 	timer.c
 	timer.h
+	tonemap.c
+	tonemap.h
 	vulkan_basics.h
 	vulkan_basics.c
 	vulkan_formats.h
 	vulkan_formats.c
+	shaders/apply_extinction_transfer_function.comp.glsl
+	shaders/bc4_compress.comp.glsl
+	shaders/brick_reduce.comp.glsl
 	shaders/camera_utilities.glsl
+	shaders/compute_quantization_coeffs.comp.glsl
 	shaders/constants.glsl
+	shaders/default_quantization_coeffs.comp.glsl
+	shaders/grid_indices.glsl
 	shaders/gui.frag.glsl
 	shaders/gui.vert.glsl
-	shaders/mesh_quantization.glsl
-	shaders/pathtrace.frag.glsl
-	shaders/pathtrace.vert.glsl
+	shaders/noise.glsl
+	shaders/phase_functions.glsl
 	shaders/srgb_utility.glsl
+	shaders/stat_reduce_0.comp.glsl
+	shaders/stat_reduce_1.comp.glsl
 	shaders/tonemap.frag.glsl
 	shaders/tonemap.vert.glsl
+	shaders/volume.frag.glsl
+	shaders/volume.vert.glsl
+	shaders/volume_utilities.glsl
+	shaders/volume_quantization.glsl
 )

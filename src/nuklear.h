@@ -8,4 +8,5 @@
 #define NK_ZERO_COMMAND_MEMORY
 #define NK_UINT_DRAW_INDEX
 #define NK_KEYSTATE_BASED_INPUT
+#define NK_MAX_NUMBER_BUFFER 1024
 #include "../ext/nuklear.h"

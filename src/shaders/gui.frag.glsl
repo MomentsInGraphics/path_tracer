@@ -1,9 +1,12 @@
 #version 460
 #extension GL_GOOGLE_include_directive : enable
 #include "srgb_utility.glsl"
+#include "constants.glsl"
+
 
 //! The glyph image produced by Nuklear
 layout (binding = 1) uniform sampler2D g_glyph_image;
+
 
 //! The texture coordinate to use to access the glyph image
 layout (location = 0) smooth in vec2 g_tex_coord;

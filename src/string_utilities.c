@@ -1,6 +1,16 @@
 #include "string_utilities.h"
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
+
+
+char* copy_string(const char* string) {
+	if (!string) return NULL;
+	size_t length = strlen(string);
+	char* result = malloc(length + 1);
+	memcpy(result, string, sizeof(char) * (length + 1));
+	return result;
+}
 
 
 char* cat_strings(const char* const* const strings, size_t string_count) {
@@ -19,9 +29,19 @@ char* cat_strings(const char* const* const strings, size_t string_count) {
 }
 
 
-char* copy_string(const char* string) {
-	size_t length = strlen(string);
-	char* result = malloc(length + 1);
-	memcpy(result, string, length + 1);
+char* double_to_string(char* string, double n) {
+	//! \todo Use scientific notation
+	sprintf(string, "%.5lf", n);
+	return string;
+}
+
+
+double string_to_double(const char* string, const char** end){
+	if (!string) return 0.0;
+	double result = 0.0;
+	sscanf(string, "%lf", &result);
+	//! \todo Determine end properly
+	if (end)
+		(*end) = string + strlen(string);
 	return result;
 }

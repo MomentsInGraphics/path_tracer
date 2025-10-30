@@ -34,6 +34,53 @@ static inline void mat_vec_mul(float* out, const float* mat, const float* vec, u
 }
 
 
+//! Computes the dot product of two vectors of the given (identical) size
+static inline float dot_product(const float* lhs, const float* rhs, uint32_t n) {
+	float dot = 0.0f;
+	for (uint32_t i = 0; i != n; ++i)
+		dot += lhs[i] * rhs[i];
+	return dot;
+}
+
+
+//! A cross-product of two vectors. out must be neither lhs nor rhs.
+static inline void cross(float out[3], const float lhs[3], const float rhs[3]) {
+	out[0] = lhs[1] * rhs[2] - lhs[2] * rhs[1];
+	out[1] = lhs[2] * rhs[0] - lhs[0] * rhs[2];
+	out[2] = lhs[0] * rhs[1] - lhs[1] * rhs[0];
+}
+
+
+//! Computes coefficients of the plane equation for a plane through the three
+//! points a, b, c (in homogeneous coordinates)
+static inline void plane_from_3_points(float plane[4], const float a[4], const float b[4], const float c[4]) {
+	plane[3] = a[0] * b[1] * c[2];
+	plane[2] = -a[0] * b[1] * c[3];
+	plane[3] -= a[0] * b[2] * c[1];
+	plane[1] = a[0] * b[2] * c[3];
+	plane[2] += a[0] * b[3] * c[1];
+	plane[1] -= a[0] * b[3] * c[2];
+	plane[3] -= a[1] * b[0] * c[2];
+	plane[2] += a[1] * b[0] * c[3];
+	plane[3] += a[1] * b[2] * c[0];
+	plane[0] = -a[1] * b[2] * c[3];
+	plane[2] -= a[1] * b[3] * c[0];
+	plane[0] += a[1] * b[3] * c[2];
+	plane[3] += a[2] * b[0] * c[1];
+	plane[1] -= a[2] * b[0] * c[3];
+	plane[3] -= a[2] * b[1] * c[0];
+	plane[0] += a[2] * b[1] * c[3];
+	plane[1] += a[2] * b[3] * c[0];
+	plane[0] -= a[2] * b[3] * c[1];
+	plane[2] -= a[3] * b[0] * c[1];
+	plane[1] += a[3] * b[0] * c[2];
+	plane[2] += a[3] * b[1] * c[0];
+	plane[0] -= a[3] * b[1] * c[2];
+	plane[1] -= a[3] * b[2] * c[0];
+	plane[0] += a[3] * b[2] * c[1];
+}
+
+
 //! Normalizes the given vector with respect to the 2-norm in place
 //! \return false if the squared length underflowed to zero, true otherwise
 bool normalize(float* vec, uint32_t entry_count);
@@ -46,7 +93,12 @@ void rotation_matrix_from_angles(float out_rotation[3 * 3], const float angles[3
 
 
 //! Computes the inverse of a 4x4 matrix (row major)
-void invert_mat4(float out_inv[4 * 4], float mat[4 * 4]);
+void invert_mat4(float out_inv[4 * 4], const float mat[4 * 4]);
+
+
+//! Pads the given 3x4-matrix into a 4x4-matrix by attaching (0,0,0,1) as last
+//! row
+void pad_mat3x4_to_mat4(float out_padded[4 * 4], const float mat[3 * 4]);
 
 
 //! A helper for half_to_float() to modify floats bit by bit

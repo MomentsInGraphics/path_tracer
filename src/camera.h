@@ -28,12 +28,6 @@ typedef enum {
 	//! A camera with orthographic projection and controls similar to the
 	//! first person camera
 	camera_type_ortho,
-	//! A camera that uses spherical coordinates to show an entire hemisphere
-	camera_type_hemispherical,
-	//! A camera that uses spherical coordinates to show an entire sphere
-	camera_type_spherical,
-	//! Number of entries in this enumeration
-	camera_type_count,
 } camera_type_t;
 
 
@@ -89,3 +83,27 @@ void get_view_to_projection_space(float view_to_projection[4 * 4], const camera_
 	\param camera The camera for which to construct the transform.
 	\param aspect_ratio The ratio of viewport width over viewport height.*/
 void get_world_to_projection_space(float world_to_projection[4 * 4], const camera_t* camera, float aspect_ratio);
+
+
+/*! Computes a point on the near clipping plane for a camera defined using a
+	homogeneous transform.
+	\param out_origin The output point on the near clipping plane.
+	\param ray_tex_coord The screen-space location of the point in a coordinate
+		frame where the left top of the viewport is (0, 0), the right top is
+		(1, 0) and the right bottom (1, 1).
+	\param proj_to_world_space The projection to world space transform of
+		the camera (to be multiplied from the left).
+	\return The ray origin on the near clipping plane in world space.*/
+void get_camera_ray_origin(float out_origin[3], const float ray_tex_coord[2], const float proj_to_world_space[4 * 4]);
+
+
+/*! Computes a ray direction for a camera defined using a homogeneous
+	transform.
+	\param out_dir The normalized output direction vector.
+	\param ray_tex_coord The screen-space location of the point in a coordinate
+		frame where the left top of the viewport is (0, 0), the right top is
+		(1, 0) and the right bottom (1, 1).
+	\param world_to_proj_space The world to projection space transform of the
+		camera (to be multiplied from the left).
+	\return The normalized world-space ray direction for the camera ray.*/
+void get_camera_ray_direction(float out_dir[3], const float ray_tex_coord[2], const float world_to_proj_space[4 * 4]);

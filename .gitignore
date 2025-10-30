@@ -3,14 +3,16 @@
 .idea
 *.kate-swp
 *.spv
+*.spv_unoptimized
 *.blend*
 *.lyx~
 build
-data/attribution.txt
 data/Bistro_textures
 data/Bistro_inside.vks
 data/Bistro_outside.vks
 data/quicksave.save
+data/quicksave.rt_save
+data/quicksave.jack_save
 data/brain.blob
 data/M24_06.edf
 data/screenshot.*
@@ -22,3 +24,8 @@ data/attic_textures
 data/living_room_day.vks
 data/living_room_night.vks
 data/living_room_textures
+data/coastal_cliff*
+data/light_probe
+data/volume
+documents/deliverable_3.1.docx
+documents/deliverable_3.2.docx

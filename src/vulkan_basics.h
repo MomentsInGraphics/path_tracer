@@ -22,10 +22,10 @@ typedef struct {
 	VkPhysicalDevice physical_device;
 	//! Properties of physical_device
 	VkPhysicalDeviceProperties physical_device_properties;
+	//! Properties of physical_device regarding Vulkan 1.1 functionality
+	VkPhysicalDeviceVulkan11Properties physical_device_properties_11;
 	//! Memory types and heaps available through physical_device
 	VkPhysicalDeviceMemoryProperties memory_properties;
-	//! Properties for acceleration structures (also known as BVHs)
-	VkPhysicalDeviceAccelerationStructurePropertiesKHR bvh_properties;
 	//! The Vulkan device created using physical_device
 	VkDevice device;
 	//! A queue that supports graphics and compute

@@ -1,0 +1,30 @@
+This folder contains the following assets created by third parties.
+
+
+# Volumes
+
+The Intel cloud is made available by Intel Corp. and subject to the ASWF Digital Assets License v1.1:
+https://dpel.aswf.io/intel-cloud-library/
+
+The Disney cloud is made available by Walt Disney Animation Studios and subject to the Creative Commons Attribution-ShareAlike 3.0 Unported License:
+https://disneyanimation.com/resources/clouds/
+
+The other volumes are OpenVDB samples:
+https://www.openvdb.org/download/
+
+
+# Light probes
+
+All light probes (except white_1k.hdr) are courtesy of Poly Haven and are in the public domain (CC0):
+https://polyhaven.com/
+
+
+# Transfer functions
+
+The transfer functions are colormaps extracted from matplotlib:
+https://matplotlib.org/stable/users/explain/colors/colormaps.html
+
+
+# Fonts
+
+The Linux Biolinum font is licensed under the GNU General Public License and the SIL Open Font License.
